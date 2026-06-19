@@ -23,10 +23,10 @@ Route::prefix('auth')->group(function () {
     
     Route::get('/test-mail', function () {
 
-    Mail::to('sayagary@gmail.com')
+    Mail::to('oioi@gmail.com')
         ->send(new VerifyOtpEmail(
-            '123456',
-            'sayagary@gmail.com'
+            '985349',
+            'oioi@gmail.com'
         ));
 
     return 'OK';

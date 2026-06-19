@@ -53,6 +53,7 @@ class AuthController extends Controller
                 $this->sendOtp($user);
             } catch (\Exception $mailException) {
                 // Jika email gagal, delete user yang baru dibuat
+                
                 $user->delete();
                 
                 return response()->json([
@@ -72,6 +73,7 @@ class AuthController extends Controller
                 ],
             ], 201);
         } catch (\Exception $e) {
+            dd($e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
@@ -85,30 +87,21 @@ class AuthController extends Controller
     public function sendOtp(User $user)
     {
         try {
+            
             // Hapus OTP lama yang belum expired
             $user->emailVerifications()->delete();
-
             // Generate OTP 6 digit
             $otpCode = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
 
             // Simpan OTP ke database
-            $emailVerification = EmailVerification::create([
-                'user_id' => $user->id,
+            $user->emailVerifications()->create([
                 'otp_code' => $otpCode,
                 'expired_at' => now()->addMinutes(5),
             ]);
-dd($user->email);
+
             // Kirim email dengan OTP
             Mail::to($user->email)->send(new VerifyOtpEmail($otpCode, $user->email));
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Kode OTP telah dikirim ke email Anda.',
-                'data' => [
-                    'email' => $user->email,
-                    'expires_in' => '5 menit',
-                ],
-            ], 200);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
