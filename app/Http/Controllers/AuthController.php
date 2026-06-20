@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\SendOtpEmailJob;
 use App\Models\User;
 use App\Models\EmailVerification;
 use App\Mail\VerifyOtpEmail;
@@ -53,9 +54,9 @@ class AuthController extends Controller
                 $this->sendOtp($user);
             } catch (\Exception $mailException) {
                 // Jika email gagal, delete user yang baru dibuat
-                
+
                 $user->delete();
-                
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Gagal mengirim OTP. Silakan coba lagi.',
@@ -87,7 +88,7 @@ class AuthController extends Controller
     public function sendOtp(User $user)
     {
         try {
-            
+
             // Hapus OTP lama yang belum expired
             $user->emailVerifications()->delete();
             // Generate OTP 6 digit
@@ -101,7 +102,7 @@ class AuthController extends Controller
 
             // Kirim email dengan OTP
             Mail::to($user->email)->send(new VerifyOtpEmail($otpCode, $user->email));
-
+            // SendOtpEmailJob::dispatch($user->email,$otpCode);  //jalankan pakai php artisan queue:work
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -142,7 +143,11 @@ class AuthController extends Controller
                 ], 400);
             }
 
-            return $this->sendOtp($user);
+            $this->sendOtp($user);
+            return response()->json([
+                'success' => true,
+                'message' => "Kode OTP berhasil dikirim ulang ke email anda"
+            ]);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -213,17 +218,11 @@ class AuthController extends Controller
 
             $emailVerification->delete();
 
-            // Generate token API jika ada
-            $token = $user->createToken('api_token')->plainTextToken;
 
             return response()->json([
                 'success' => true,
                 'message' => 'Email berhasil diverifikasi',
-                'data' => [
-                    'user_id' => $user->id,
-                    'email' => $user->email,
-                    'token' => $token,
-                ],
+
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
@@ -248,6 +247,8 @@ class AuthController extends Controller
                 'password.required' => 'Password wajib diisi',
             ]);
 
+
+
             if ($validator->fails()) {
                 return response()->json([
                     'success' => false,
@@ -270,15 +271,14 @@ class AuthController extends Controller
                 return response()->json([
                     'success' => false,
                     'message' => 'Email belum diverifikasi. Silakan verifikasi email terlebih dahulu.',
-                    'data' => [
-                        'user_id' => $user->id,
-                        'email' => $user->email,
-                    ],
                 ], 403);
             }
 
+            // hapus token sebelumnya jika ada
+            $user->tokens()->delete();
+
             // Generate token
-            $token = $user->createToken('api_token')->plainTextToken;
+            $token = $user->createToken('api_token',['*'], now()->addDays(1))->plainTextToken;
 
             return response()->json([
                 'success' => true,
