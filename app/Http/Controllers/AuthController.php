@@ -68,9 +68,9 @@ class AuthController extends Controller
                 'success' => true,
                 'message' => 'Registrasi berhasil! Kode OTP telah dikirim ke email Anda.',
                 'data' => [
-                    'user_id' => $user->id,
+                    'userId' => $user->id,
                     'email' => $user->email,
-                    'expires_in' => '5 menit',
+                    'expiresIn' => '5 menit',
                 ],
             ], 201);
         } catch (\Exception $e) {
@@ -143,7 +143,19 @@ class AuthController extends Controller
                 ], 400);
             }
 
-            $this->sendOtp($user);
+            // $this->sendOtp($user);
+             $user->emailVerifications()->delete();
+            // Generate OTP 6 digit
+            $otpCode = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+
+            // Simpan OTP ke database
+            $user->emailVerifications()->create([
+                'otp_code' => $otpCode,
+                'expired_at' => now()->addMinutes(5),
+            ]);
+
+            // Kirim email dengan OTP
+            Mail::to($user->email)->send(new VerifyOtpEmail($otpCode, $user->email));
             return response()->json([
                 'success' => true,
                 'message' => "Kode OTP berhasil dikirim ulang ke email anda"
@@ -284,7 +296,7 @@ class AuthController extends Controller
                 'success' => true,
                 'message' => 'Login berhasil',
                 'data' => [
-                    'user_id' => $user->id,
+                    'userId' => $user->id,
                     'email' => $user->email,
                     'token' => $token,
                 ],
