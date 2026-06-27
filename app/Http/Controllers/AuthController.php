@@ -28,7 +28,8 @@ class AuthController extends Controller
             $validator = Validator::make($request->all(), [
                 'email' => 'required|email|unique:users,email',
                 'namaLengkap' => 'required|string',
-                'password' => 'required|min:8|confirmed',
+                'password' => 'required|min:8',
+                'passwordConfirmation' => 'required|same:password'
             ], [
                 'email.required' => 'Email wajib diisi',
                 'email.email' => 'Format email tidak valid',
@@ -36,7 +37,9 @@ class AuthController extends Controller
                 'namaLengkap.required' => 'Nama Lengkap Wajib diisi',
                 'password.required' => 'Password wajib diisi',
                 'password.min' => 'Password minimal 8 karakter',
-                'password.confirmed' => 'Konfirmasi password tidak sesuai',
+                'passwordConfirmation.required' => 'Konfirmasi password wajib diisi',
+                'passwordConfirmation.same' => 'Konfirmasi password tidak sesuai',
+
             ]);
 
 
@@ -502,23 +505,19 @@ class AuthController extends Controller
     public function resetPassword(Request $request)
     {
         try {
-            $request->validate([
-                'token' => 'required',
-                'email' => 'required|email',
-                'password' => 'required|min:6|confirmed',
-            ]);
-
             $validator = Validator::make($request->all(), [
                 'token' => 'required',
                 'email' => 'required|email',
-                'password' => 'required|min:8|confirmed',
+                'password' => 'required|min:8',
+                'passwordConfirmation' => 'required|same:password'
             ], [
                 'token.required' => 'token wajib diisi',
                 'email.required' => 'Email wajib diisi',
                 'email.email' => 'Format email tidak valid',
                 'password.required' => 'Password wajib diisi',
                 'password.min' => 'Password minimal 8 karakter',
-                'password.confirmed' => 'Konfirmasi password tidak sesuai',
+                'passwordConfirmation.required' => 'Konfirmasi password wajib diisi',
+                'passwordConfirmation.same' => 'Konfirmasi password tidak sesuai',
             ]);
 
             if ($validator->fails()) {
