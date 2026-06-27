@@ -18,6 +18,13 @@ Route::prefix('auth')->group(function () {
     // Verify OTP
     Route::post('/verify-otp', [AuthController::class, 'verifyOtp'])->name('auth.verifyOtp');
 
+    // send reset password email
+    Route::post('/forgot-password',[AuthController::class,'forgotPassword'])->name('auth.forgotPassword');
+
+    // reset password
+    Route::post('reset-password',[AuthController::class,'resetPassword'])->name('auth.resetPassword');
+
+
     // Check Verification Status
     Route::get('/verification-status', [AuthController::class, 'checkVerificationStatus'])->name('auth.verificationStatus');
     

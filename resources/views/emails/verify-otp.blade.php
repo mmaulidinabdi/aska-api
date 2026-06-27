@@ -81,7 +81,7 @@
         </div>
 
         <div class="content">
-            <p>Halo,</p>
+            <p>Halo, {{$userEmail}}</p>
             <p>Kami menerima permintaan verifikasi email Anda. Gunakan kode OTP di bawah ini untuk menyelesaikan verifikasi:</p>
 
             <div class="otp-box">

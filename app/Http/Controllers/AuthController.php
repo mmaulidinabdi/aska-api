@@ -3,13 +3,17 @@
 namespace App\Http\Controllers;
 
 use App\Jobs\SendOtpEmailJob;
-use App\Models\User;
-use App\Models\EmailVerification;
+use App\Mail\ResetPassword;
 use App\Mail\VerifyOtpEmail;
+use App\Models\EmailVerification;
+use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -54,29 +58,21 @@ class AuthController extends Controller
                 'password' => Hash::make($validated['password']),
             ]);
 
-            try {
-                // Kirim OTP otomatis
-                // $this->sendOtp($user);
-                 $user->emailVerifications()->delete();
-            // Generate OTP 6 digit
             $otpCode = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
 
-            // Simpan OTP ke database
             $user->emailVerifications()->create([
                 'otp_code' => $otpCode,
                 'expired_at' => now()->addMinutes(5),
             ]);
 
-            // Kirim email dengan OTP
-            Mail::to($user->email)->send(new VerifyOtpEmail($otpCode, $user->email));
-            } catch (\Exception $mailException) {
-                // Jika email gagal, delete user yang baru dibuat
+            try {
 
-                $user->delete();
+                Mail::to($user->email)->send(new VerifyOtpEmail($otpCode, $user->email));
+            } catch (\Exception $mailException) {
 
                 return response()->json([
                     'success' => false,
-                    'message' => 'Gagal mengirim OTP. Silakan coba lagi.',
+                    'message' => 'Gagal mengirim OTP. Silakan minta OTP lagi',
                     'error' => 'email_send_failed',
                 ], 500);
             }
@@ -87,7 +83,7 @@ class AuthController extends Controller
                 'data' => [
                     'userId' => $user->id,
                     'email' => $user->email,
-                    'namaLengkap'=>$user->nama_lengkap,
+                    'namaLengkap' => $user->nama_lengkap,
                     'expiresIn' => '5 menit',
                 ],
             ], 201);
@@ -137,10 +133,6 @@ class AuthController extends Controller
         try {
             $validator = Validator::make($request->all(), [
                 'email' => 'required|email|exists:users,email',
-            ], [
-                'email.required' => 'Email wajib diisi',
-                'email.email' => 'Format email tidak valid',
-                'email.exists' => 'Email tidak terdaftar',
             ]);
 
             if ($validator->fails()) {
@@ -152,6 +144,13 @@ class AuthController extends Controller
             }
 
             $user = User::where('email', $request->email)->first();
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Email tidak ditemukan'
+                ]);
+            }
 
             // Cek apakah user sudah terverifikasi
             if ($user->email_verified_at) {
@@ -194,13 +193,13 @@ class AuthController extends Controller
         try {
             $validator = Validator::make($request->all(), [
                 'email' => 'required|email|exists:users,email',
-                'otp_code' => 'required|digits:6',
+                'otpCode' => 'required|digits:6',
             ], [
                 'email.required' => 'Email wajib diisi',
                 'email.email' => 'Format email tidak valid',
                 'email.exists' => 'Email tidak terdaftar',
-                'otp_code.required' => 'Kode OTP wajib diisi',
-                'otp_code.digits' => 'Kode OTP harus 6 digit',
+                'otpCode.required' => 'Kode OTP wajib diisi',
+                'otpCode.digits' => 'Kode OTP harus 6 digit',
             ]);
 
             if ($validator->fails()) {
@@ -223,7 +222,7 @@ class AuthController extends Controller
 
             // Cari OTP di database
             $emailVerification = EmailVerification::where('user_id', $user->id)
-                ->where('otp_code', $request->otp_code)
+                ->where('otp_code', $request->otpCode)
                 ->first();
 
             if (!$emailVerification) {
@@ -442,6 +441,91 @@ class AuthController extends Controller
                 'success' => false,
                 'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
             ], 500);
+        }
+    }
+
+    public function forgotPassword(Request $request)
+    {
+        try {
+            $request->validate(['email' => 'required|email']);
+
+            $user = User::where('email', $request->email)->first();
+            if (!$user) {
+                return response()->json([
+                    'message' => 'Link reset dikirim ke akun yang terdaftar'
+                ], 404);
+            }
+
+            $token = Str::random(64);
+
+            DB::table('password_reset_tokens')->updateOrInsert(
+                ['email' => $request->email],
+                [
+                    'token' => Hash::make($token),
+                    'created_at' => now()
+                ]
+            );
+
+            $resetLink = env('NEXT_URL') . '/auth/newPassword?token=' . $token . '&email=' . $request->email;
+
+            Mail::to($request['email'])->send(new ResetPassword($user->email,$resetLink));
+
+            return response()->json([
+                'message' => "Link berhasil dikirim ke " . $request->email . ", silahkan cek email anda!"
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+
+    public function resetPassword(Request $request)
+    {
+        try {
+            $request->validate([
+                'token' => 'required',
+                'email' => 'required|email',
+                'password' => 'required|min:6|confirmed',
+            ]);
+
+            $reset = DB::table('password_reset_tokens')->where('email', $request->email)->first();
+
+            if (!$reset) {
+                return response()->json(['message' => 'Token tidak ditemukan'], 404);
+            }
+
+            // cek masa berlaku token
+            $createdAt = Carbon::parse($reset->created_at);
+            //kalau lebih dari 2 menit hapus token
+            if (Carbon::now()->greaterThan($createdAt->addMinutes(15))) {
+                //hapus token yg expired
+                DB::table('password_reset_tokens')->where('email', $request->email)->delete();
+                return response()->json(['message' => 'Token sudah kadaluarsa'], 400);
+            }
+
+            // Cek token valid atau tidak
+            if (!Hash::check($request->token, $reset->token)) {
+                return response()->json(['message' => 'Token tidak valid.'], 400);
+            }
+
+            //update password
+            $user = User::where('email', $request->email)->first();
+            $user->update([
+                'password' => Hash::make($request->password)
+            ]);
+
+            // Delete token setelah dipakai
+            DB::table('password_reset_tokens')->where('email', $request->email)->delete();
+
+            $user->tokens()->delete();
+
+            return response()->json(['message' => 'Password berhasil direset.']);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'error' => 'error',
+                'message' => $e->getMessage()
+            ]);
         }
     }
 }
